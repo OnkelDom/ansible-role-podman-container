@@ -1,0 +1,98 @@
+---
+- name: gather operating system variables
+  include_vars: "{{ item }}"
+  with_first_found:
+    - "{{ ansible_distribution | lower }}-{{ ansible_distribution_version | lower }}.yml"
+    - "{{ ansible_distribution | lower }}-{{ ansible_distribution_major_version | lower }}.yml"
+    - "{{ ansible_distribution_file_variety | lower }}-{{ ansible_distribution_major_version | lower }}.yml"
+    - "{{ ansible_os_family | lower }}-{{ ansible_distribution_major_version | lower }}.yml"
+    - "{{ ansible_distribution | lower }}.yml"
+    - "{{ ansible_os_family | lower }}-{{ ansible_distribution_version.split('.')[0] }}.yml"
+    - "{{ ansible_os_family | lower }}.yml"
+  tags: podman-container
+
+- name: install podman
+  package:
+    name: podman
+    state: present
+  environment: "{{ proxy_env }}"
+  become: true
+  tags: podman-container
+
+- name: configure br_netfilter
+  copy:
+    content: "br_netfilter"
+    dest: /etc/modules-load.d/podman.conf
+    owner: root
+    group: root
+    mode: 0644
+  register: "_podman_br_netfilter_state"
+  become: true
+  tags: podman-container
+
+- name: restart systemd-modules-load
+  service:
+    name: systemd-modules-load
+    state: restartet
+  when: _podman_br_netfilter_state['changed']
+  become: true
+  tags: podman-container
+
+- name: configure sysctl
+  sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: no
+    ignoreerrors: yes
+  with_items:
+    - { name: net.ipv6.conf.default.forwarding, value: 1 }
+    - { name: net.ipv4.ip_forward, value: 1 }
+    - { name: net.ipv4.ping_group_range, value: "0 2000000" }
+    - { name: net.ipv4.conf.all.rp_filter, value: 2 }
+    - { name: net.ipv4.ip_local_port_range, value: "9000 65500" }
+    - { name: user.max_user_namespaces, value: 15000 }
+  register: "_podman_sysctl_state"
+  tags: podman-container
+  become: true
+
+- name: reload sysctl
+  command: /sbin/sysctl -p
+  when: _podman_sysctl_state['changed']
+  tags: podman-container
+  become: true
+
+- name: create group
+  group:
+    name: "{{ podman_container_base_group }}"
+    system: true
+    state: present
+  when: podman_container_base_group != "root"
+  become: true
+  tags: podman-container
+
+- name: create users
+  user:
+    name: "{{ item.params.user }}"
+    system: true
+    shell: "/sbin/nologin"
+    group: "{{ podman_container_base_group }}"
+    createhome: false
+  when: podman_container_base_user != "root"
+  with_items:
+    - "{{ podman_container_config }}"
+  become: true
+  tags: podman-container
+
+- name: create directories
+  file:
+    path: "{{ item.1.volumes }}"
+    state: directory
+    owner: "{{ item.0.params.user }}"
+    group: "{{ podman_container_base_group }}"
+    mode: 0755
+  with_subelements:
+    - "{{ podman_container_config }}"
+    - params.volumes
+  become: true
+  tags: podman-container

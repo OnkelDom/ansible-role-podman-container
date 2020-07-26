@@ -1,0 +1,8 @@
+---
+podman_container_packages:
+  - firewalld
+  - firewall-config
+  - python3-firewall
+  - python3-libselinux
+  - python3-policycoreutils
+  - podman

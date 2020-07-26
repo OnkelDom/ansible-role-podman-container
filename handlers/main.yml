@@ -1,0 +1,14 @@
+---
+- name: restart firewalld
+  service:
+    name: firewalld
+    state: restarted
+  become: true
+  tags: firewalld
+
+- name: reload firewalld
+  service:
+    name: firewalld
+    state: reloaded
+  become: true
+  tags: firewalld

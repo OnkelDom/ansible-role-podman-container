@@ -1,0 +1,29 @@
+---
+# SAVE FOR LATER WITH INCLUDE_TASKS????
+- name: create users
+  user:
+    name: "{{ item }}"
+    system: true
+    shell: "/sbin/nologin"
+    group: "{{ podman_container_base_group }}"
+    createhome: false
+  when: podman_container_base_user != "root"
+  with_items: podman_container_config.params.user
+  become: true
+  tags: podman-container
+
+- name: create configuration and data directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ prometheus_system_user }}"
+    group: "{{ prometheus_system_group }}"
+    mode: 0755
+  with_items:
+    - "{{ prometheus_db_dir }}"
+    - "{{ prometheus_config_dir }}"
+    - "{{ prometheus_config_dir }}/conf.d"
+    - "{{ prometheus_config_dir }}/rules"
+    - "{{ prometheus_config_dir }}/file_sd"
+  become: true
+  tags: podman-container

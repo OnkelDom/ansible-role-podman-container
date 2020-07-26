@@ -1,0 +1,111 @@
+{{ ansible_managed | comment}}
+
+[Unit]
+Description={{ item.name }}
+Documentation={{ item.description }}
+After=network-online.target
+Wants=network-online.target local-fs.target syslog.service
+
+[Service]
+{% if proxy_env | length > 0 %}
+{%   for option, value in proxy_env|sort %}
+{%     if value is string %}
+Environment="{{ option }}={{ value|string }}"
+{%     elif value is number %}
+Environment="{{ option }}={{ value|int }}"
+{%     elif value is iterable %}
+{%       for v in value %}
+Environment="{{ option }}={{ v }}"
+{%       endfor %}
+{%     else %}
+Environment="{{ option }}={{ value }}"
+{%     endif %}
+{%   endfor %}
+{% endif %}
+{% if item.systemd_unit.execreload | length > 0 %}
+{%   for item in item.systemd_unit.execreload %}
+{% if item.params.user | length > 0 %}
+User={{ item.params.user }}
+{% else %}
+User=root
+{% endif %}
+ExecReload={{ item }}
+{%   endfor}
+{% else %}
+Slice=machine.slice
+Delegate=true
+ExecStartPre=-/bin/podman rm {{ item.name }}
+{% if item.systemd_unit.execstartpre | length > 0 %}
+{%   for item in item.systemd_unit.execstartpre %}
+ExecStartPre={{ item }}
+{%   endfor}
+{% endif %}
+ExecStart=/bin/podman run \
+  --name {{ item.name }} \
+{% if item.params | length > 0 %}
+{%   for option, value in item.params()|sort %}
+{%     elif value is string %}
+  --{{ option }} {{ value|string }} \
+{%     elif value is number %}
+  --{{ option }} {{ value|int }} \
+{%     elif value is iterable %}
+{%       for v in value %}
+  --{{ option }} {{ v }} \
+{%       endfor %}
+{%     else %}
+  --{{ option }} {{ value }} \
+{%     endif %}
+{%   endfor %}
+{% endif %}
+  {{ item.image }} \
+  {{ item.command }}
+{% if item.systemd_unit.execreload | length > 0 %}
+{%   for item in item.systemd_unit.execreload %}
+ExecReload={{ item }}
+{%   endfor}
+{% else %}
+ExecReload=/usr/bin/kill -HUP $MAINPID
+{% endif %}
+{% if item.systemd_unit.execstop | length > 0 %}
+{%   for item in item.systemd_unit.execstop %}
+ExecStop={{ item }}
+{%   endfor}
+{% endif %}
+ExecStop=-/bin/podman stop {{ item.name }}
+Restart={{ item.systemd_unit.restart | default('on-failure') }}
+SyslogIdentifier={{ item.name }}
+{% if item.systemd_unit.service_output | length > 0 %}
+{%   for limit, valie in item.systemd_unit.service_output %}
+Output{{ limit }}={{ value }}
+{%   endfor %}
+{% endif %}
+{% if item.systemd_unit.service_limits | length > 0 %}
+{%   for limit, valie in item.systemd_unit.service_limits %}
+Limit{{ limit }}={{ value }}
+{%   endfor %}
+{% endif %}
+{% if item.systemd_unit.service_privates | length > 0 %}
+{%   for limit, valie in item.systemd_unit.service_privates %}
+Private{{ limit }}={{ value }}
+{%   endfor %}
+{% endif %}
+PrivateTmp=
+PrivateDevices=
+{% if item.systemd_unit.service_protects | length > 0 %}
+{%   for limit, valie in item.systemd_unit.service_protects %}
+Private{{ limit }}={{ value }}
+{%   endfor %}
+{% endif %}
+ProtectHome=
+ProtectSystem=
+{% if item.systemd_unit.service_capabilitys | length > 0 %}
+{%   for limit, valie in item.systemd_unit.service_capabilitys %}
+Private{{ limit }}={{ value }}
+{%   endfor %}
+{% endif %}
+CapabilityBoundingSet=
+AmbientCapabilities=
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

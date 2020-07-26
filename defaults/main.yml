@@ -1,0 +1,82 @@
+---
+# Set Proxy Environments
+# When enabled, it is set in every systemd unit as environment variable
+proxy_env: []
+#proxy_env:
+#  http_proxy: "http://proxy:3128"
+#  https_proxy: "http://proxy:3128"
+#  no_proxy: "10.0.0.0/8,192.168.0.0/16,localhost,127.0.0.1,{{ ansible_domain }}"
+
+# Setup base configuration
+podman_container_base_config_dir: "/etc/podman-container"
+podman_container_base_data_dir: "/var/lib/podman-container"
+podman_container_base_user: podman
+podman_container_base_group: podman
+
+# Setup container configuration
+podman_container_config:
+  - name: prometheus
+    image: docker.io/dominiklenhardt/prometheus:2.19.3
+    command: /app/prometheus --config.file=/config/prometheus.yml
+             --web.external-url=http://prometheus.localhost
+             --storage.tsdb.retention.time=7d
+             --web.enable-admin-api
+             --web.enable-lifecycle
+             --storage.tsdb.path=/data
+    params:
+      volume:
+        - "{{ podman_container_base_data_dir }}/{{ podman_container_config.name }}:/data"
+        - "{{ podman_container_base_config_dir }}/{{ podman_container_config.name }}:/config"
+      # When you define an user, the playbook create them with the default group
+      user: prometheus
+      hostname: "{{ podman_container_config.name }}.{{ ansible_domain }}"
+      env:
+        - LANG=en_US.UTF-8
+        - TZ=Europe/Berlin
+      dns:
+        - 10.62.0.18
+        - 10.62.0.19
+        - 10.62.2.18
+        - 10.62.2.19
+      network:
+        - host
+    container_confings:
+      # path defined with: podman_container_base_config_dir/podman_container_config.name/containre_configs.name
+      # you can use predefined methods to generate configs as json, yaml or raw data
+      - name: prometheus.yml
+        content_to_yaml: []
+        content_to_json: []
+        content_to_raw: []
+      - name: alertrules.yml
+        content_to_yaml: []
+        content_to_json: []
+        content_to_raw: []
+    systemd_unit:
+      restart: always
+      environment: []
+      execstartpre: []
+        # - "/bin/podman run --rm --name {{ item.name }}-pre {{ podman_container_config.image }} /app/promtool check config /config/prometheus.yml"
+      execreload: []
+        # - "/usr/bin/kill -HUP $MAINPID"
+      service_output: []
+        # StandardOutput: 'null'
+        # StandardError: 'null'
+      service_privates: []
+        # Tmp: true
+        # Devices: true
+      service_protects: []
+        # Home: true
+        # System: full
+      service_capabilitys: []
+        # CapabilityBoundingSet: CAP_NET_BIND_SERVICE
+        # AmbientCapabilities: CAP_NET_BIND_SERVICE
+        # NoNewPrivileges: true
+      service_limits: []
+        # FSIZE: infinity
+        # CPU: infinity
+        # AS: infinity
+        # MEMLOCK: infinity
+        # NOFILE: 64000
+        # NPROC: 64000
+      environment: []
+        # APP_HOME: /blabla
